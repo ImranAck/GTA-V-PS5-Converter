@@ -1,0 +1,68 @@
+--- a/src/module/features/lsc.inc
++++ b/src/module/features/lsc.inc
+@@ -349,21 +349,32 @@
+   if (!g_n.set_vehicle_mod || !g_n.get_num_vehicle_mods || !g_n.set_vehicle_mod_kit) {
+     return unavailable(action, "missing vehicle mod natives");
+   }
+   int v = current_vehicle();
+   if (!v) return failed(action, "not in a vehicle");
+   invoke_void(g_n.set_vehicle_mod_kit, v, 0);
+-  static const int kCosmeticMods[] = {
+-      GTAV_VEH_MOD_SPOILER,      GTAV_VEH_MOD_FRONT_BUMPER, GTAV_VEH_MOD_REAR_BUMPER,
+-      GTAV_VEH_MOD_SIDE_SKIRT,   GTAV_VEH_MOD_EXHAUST,      GTAV_VEH_MOD_FRAME,
+-      GTAV_VEH_MOD_GRILLE,       GTAV_VEH_MOD_HOOD,         GTAV_VEH_MOD_FENDER,
+-      GTAV_VEH_MOD_RIGHT_FENDER, GTAV_VEH_MOD_ROOF,         GTAV_VEH_MOD_WHEELS};
+-  for (uint32_t i = 0; i < sizeof(kCosmeticMods) / sizeof(kCosmeticMods[0]); ++i) {
+-    int count = invoke_return<int>(g_n.get_num_vehicle_mods, v, kCosmeticMods[i]);
+-    if (count > 0) invoke_void(g_n.set_vehicle_mod, v, kCosmeticMods[i], count - 1, 0);
+-  }
++  int installed = 0;
++  // Previously only 12 common bodywork slots were checked, so a custom vehicle's
++  // interior/trim/engine-bay/lightbar kit parts were ignored by "Install Cosmetics".
++  // Walk every known *visual* slot and keep wheels (the historical behavior).
++  for (uint32_t i = 0; i < GTAV_NUM_KIT_SLOTS; ++i) {
++    if (!kVehicleKitSlots[i].visual) continue;
++    int slot = (int)kVehicleKitSlots[i].slot;
++    int count = invoke_return<int>(g_n.get_num_vehicle_mods, v, slot);
++    if (count <= 0) continue;
++    invoke_void(g_n.set_vehicle_mod, v, slot, count - 1, 0);
++    if (!g_n.get_vehicle_mod || invoke_return<int>(g_n.get_vehicle_mod, v, slot) == count - 1)
++      ++installed;
++  }
++  const int wheel_count = invoke_return<int>(g_n.get_num_vehicle_mods, v, GTAV_VEH_MOD_WHEELS);
++  if (wheel_count > 0) {
++    invoke_void(g_n.set_vehicle_mod, v, GTAV_VEH_MOD_WHEELS, wheel_count - 1, 0);
++    if (!g_n.get_vehicle_mod || invoke_return<int>(g_n.get_vehicle_mod, v, GTAV_VEH_MOD_WHEELS) == wheel_count - 1)
++      ++installed;
++  }
++  if (!installed) return failed(action, "no usable cosmetic parts in vehicle mod kit");
+   g_mod_stage_vehicle = 0;  // force the per-slot pickers to re-read the now-modded car
+   return ok(action, "cosmetics installed");
+ }
+ 
+ // Make the current vehicle's tyres non-burstable.
+ static uint32_t ls_bulletproof_tyres() {
+@@ -512,12 +523,23 @@
+   invoke_void(g_n.set_vehicle_mod_kit, v, 0);
+   int count = g_n.get_num_vehicle_mods ? invoke_return<int>(g_n.get_num_vehicle_mods, v, slot) : 0;
+   int lvl = g_mod_stage[idx];
+   if (lvl > count - 1) lvl = count - 1;  // re-clamp at apply against the live vehicle
+   if (lvl < -1) lvl = -1;
+   invoke_void(g_n.set_vehicle_mod, v, slot, lvl, 0);
++  // Some custom pack kits expose parts in carcols but the engine never attaches
++  // the drawable to this vehicle. Refuse to report success when the native
++  // getter proves the selected part was not installed. This does NOT prove the
++  // geometry/material rendered correctly; physical testing is still required.
++  if (g_n.get_vehicle_mod) {
++    const int actual = invoke_return<int>(g_n.get_vehicle_mod, v, slot);
++    if (actual != lvl) {
++      g_mod_stage_vehicle = 0;  // next visit re-reads real current kit
++      return failed(action, "mod part not applied; check installed kit/part resources");
++    }
++  }
+   g_mod_stage[idx] = lvl;  // keep the displayed tier in step with what was actually written
+   char msg[GTAV_FEATURE_MESSAGE_LEN];
+   snprintf(msg, sizeof(msg), "%s: %s", kVehicleModSlots[idx].label,
+            lvl < 0 ? "stock" : "installed");
+   return ok(action, msg);
+ }

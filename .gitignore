@@ -1,0 +1,37 @@
+# Python bytecode / virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+.pytest_cache/
+.mypy_cache/
+# Builds / output
+build/
+dist/
+release/
+*.egg-info/
+# Game and console binary files; users supply their own
+*.rpf
+*.pft
+*.pdr
+*.ptd
+*.yft
+*.ytd
+*.elf
+*.self
+*.sprx
+*.prx
+*.pkg
+*.rar
+*.7z
+# Never commit local diagnostics or secrets
+*.log
+.env
+.env.*
+*support*.json
+*diagnostic*.json
+PRUEBA-EXE-RESULTADO.txt
+ANALISIS-MODULOS.txt
+SHA256-EXE.txt
+
+PRUEBA-EXE-GUI.txt
